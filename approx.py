@@ -59,12 +59,13 @@ class RidgeSolver:
         M, N1, N2, N3, l, ...
     """
 
-    def __init__(self, n, f_eps, M, N1, N2, N3, l=1.0, a=None, phi=None):
+    def __init__(self, n, f_eps, M, M1, N1, N2, N3, l=1.0, a=None, phi=None):
         self.n = n
         self.N1 = N1
         self.N2 = N2
         self.N3 = N3
         self.M = M
+        self.M1 = M1
         self.l = l
         self.f_eps = f_eps
         self.a = np.array(a) if a is not None else None
@@ -107,8 +108,8 @@ class RidgeSolver:
 
         logging.warning('start embeddings ...')
         embed_info = {i: {j: None for j in range(N2)} for i in range(N2)}  # if phi_i -> phi_j, embed_info[i][j] = corresponding lambda
-        bound_minus = N2 * 0.4
-        bound_plus = N2 *0.5
+        bound_minus = N2 * 0.43
+        bound_plus = N2 *0.45
         v0 = -1
         best_err = 1000
         for j in range(N2):
@@ -132,23 +133,7 @@ class RidgeSolver:
         if self.a is not None:
             print(real_abs_v[v0], "check that this number is in [0.45, 0.75]")
         if j == N2 - 1:
-            print("Maybe error with v0")
-
-        if 0:
-            quality1 = 0
-            max_quality1 = -100
-            indmaxij = 0
-            for i in range(N2):
-                for j in range(N2):
-                    if abs(real_v[j] / real_v[i]) > 1.01:
-                        quality1 += abs(real_v[j]/real_v[i] - embed_info[i][j])
-                        if abs(real_v[j]/real_v[i] - embed_info[i][j]) > max_quality1:
-                            indmaxij = (i, j)
-                            max_quality1 = abs(real_v[j]/real_v[i] - embed_info[i][j])
-                        
-            #print("Quality of lambdas: ", quality1, max_quality1, indmaxij)
-            #errs = [abs(real_v[j]/real_v[i] - embed_info[i][j]) for i in range(N2) for j in range(N2)]
-            #errs = np.array(errs)
+            print("There is no v0 with am_good in [0.43N2 ... 0.45N2]")
         return gammas[v0]
 
     def step_approximate_a(self, gamma):
@@ -189,23 +174,23 @@ class RidgeSolver:
         newa = w / np.linalg.norm(w)
         if self.a is not None:
             a_compare = self.a * self.sign
-            print("Approximation error of a, linf-norm:", max(abs(a_compare - newa)))
+            #print("Approximation error of a, linf-norm:", max(abs(a_compare - newa)))
             print("Approximation error of a, l2-norm:", np.linalg.norm(a_compare - newa))
-
         return newa
 
     def step_approximate_phi(self, newa):
-        ts = np.linspace(-1, 1, self.N3)
-
+        ts = np.linspace(-1, 1, 2 * self.N3 + 1, endpoint = True)
         values_phi = np.array([self.f_eps(t * newa) for t in ts])
+        poly_phi = polynomial.Polynomial.fit(ts, values_phi, deg=self.M1)
+        ts1 = np.linspace(-1, 1, 500)
+        values_phi1 = polynomial.polyval(ts1, poly_phi.coef)
         if self.phi is not None:
-            values_phi_real = np.array([self.phi(t * self.sign) for t in ts])
-
-        #plt.plot(ts, values_phi)
-        #plt.plot(ts, values_phi_real - values_phi)
+            values_phi_real = np.array([self.phi(t * self.sign) for t in ts1])        
+        #plt.plot(ts1, values_phi1)
+        #plt.plot(ts1, values_phi_real)
         #plt.show()
         if self.phi is not None:
-            print("Approximation error of phi in C:", max(np.abs(values_phi - values_phi_real)))
+            print("Approximation error of phi in C:", max(np.abs(values_phi1 - values_phi_real)))
         #print("Omega1", omega1())
 
 
@@ -222,6 +207,7 @@ def test_trigonom():
     
     N1 = 200
     M = 9
+    M1 = 30
     N2 = 25
     N3 = 200
     #gp = 2 ** random.random()
@@ -229,7 +215,8 @@ def test_trigonom():
     K = 5
     trigparams = np.array([random.gauss(0, 1) for _ in range(2*K + 1)])
     trigparams /= np.linalg.norm(trigparams)
-    trigpcos = trigparams[np.arange(0, 2*K + 1, 2)]#a0/2, a1, a2, ... aK
+    trigpcos = trigparams[np.arange(0, 2*K + 1, 2)]#a0, a1, a2, ... aK
+    trigpcos[0] /= np.sqrt(2)
     trigpsin = trigparams[np.arange(1, 2*K + 1, 2)]#b1, b2, ... bK
     l = 0.4
 
@@ -243,7 +230,7 @@ def test_trigonom():
     def f_eps(x):
         return f(x) + eps * (2 * random.random() - 1)
 
-    solver = RidgeSolver(n=n, f_eps=f_eps, M=M, N1=N1, N2=N2, N3=N3, a=a, phi=phi)
+    solver = RidgeSolver(n=n, f_eps=f_eps, M=M, M1=M1, N1=N1, N2=N2, N3=N3, a=a, phi=phi)
     solver.solve()
 
 
@@ -287,3 +274,5 @@ def omega1():
 
 if __name__ == "__main__":
     test_trigonom()
+
+
